@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: efk
+  name: kibana-config
+  labels:
+    app: kibana
+data:
+  kibana.yml: |
+    server.name: kibana
+    server.host: "0.0.0.0"
+    i18n.locale: zh-CN                      #设置默认语言为中文
+    elasticsearch:
+      hosts: ${ELASTICSEARCH_HOSTS}         #es集群连接地址，由于我这都都是k8s部署且在一个ns下，可以直接使用service name连接
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+  namespace: efk
+  labels:
+    app: kibana
+spec:
+  ports:
+  - port: 5601
+  type: NodePort
+  selector:
+    app: kibana
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  namespace: efk
+  labels:
+    app: kibana
+spec:
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+    spec:
+      containers:
+      - name: kibana
+        image: docker.elastic.co/kibana/kibana:7.17.1
+        imagePullPolicy: "IfNotPresent"
+        resources:
+          limits:
+            cpu: 1000m
+          requests:
+            cpu: 1000m
+        env:
+        - name: ELASTICSEARCH_URL
+          value: http://elasticsearch:9200                 #设置为handless service dns地址即可
+        - name: ELASTICSEARCH_HOSTS
+          value: http://elasticsearch:9200
+        ports:
+        - containerPort: 5601
+        volumeMounts:
+        - name: config
+          mountPath: /usr/share/kibana/config/kibana.yml     #kibana配置文件挂载地址
+          readOnly: true
+          subPath: kibana.yml
+      volumes:
+      - name: config             # 跟上面得volumeMounts名称匹配
+        configMap:
+          name: kibana-config   
